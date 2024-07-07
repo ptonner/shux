@@ -1,58 +1,45 @@
 use std::error::Error;
-use std::fs;
-use std::path::PathBuf;
-use zeromq::{Socket, SocketRecv, SocketSend, ZmqError};
+use std::process::Command;
+// use std::fs;
+// use std::path::PathBuf;
+// use jupyter_client::Client;
 
-use clap::Parser;
-
-// async fn handle_hb(connection: &mut zeromq::ReqSocket) -> Result<(), ()> {
-//     loop {
-//         connection
-//             .send("heartbeat".into())
-//             // .send(zeromq::ZmqMessage::from(b"ping".to_vec()))
-//             .await?;
-//         match connection.recv().await {
-//             Ok(_) => {}
-//             Err(e) => return Ok(()),
-//         }
-//     }
-// }
+use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
+#[command(version, about, long_about=None)]
 struct Cli {
-    /// kernelspec file to make connection
-    kernelspec: PathBuf,
+    #[command(subcommand)]
+    command: Option<Commands>,
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+#[derive(Subcommand)]
+enum Commands {
+    /// Show available kernel connections
+    Show {},
+}
+
+fn main() -> Result<(), Box<dyn Error>> {
     let cli = Cli::parse();
 
-    let data = fs::read_to_string(cli.kernelspec)?;
-    let spec: serde_json::Value = serde_json::from_str(&data)?;
-    // println!("kspec: {:?}", spec);
-
-    // println!("{}://{}:{}", spec["transport"], spec["ip"], spec["hb_port"]);
-    let address = format!(
-        "{}://{}:{}",
-        spec["transport"].as_str().unwrap(),
-        spec["ip"].as_str().unwrap(),
-        spec["hb_port"]
-    );
-    println!("Connecting to heart beat at: {:}", address);
-
-    let mut socket = zeromq::ReqSocket::new();
-    socket.connect(&address).await.expect("Failed to connect");
-    println!("Connected to server");
-
-    // handle_hb(&mut socket).await?
-
-    // for _ in 0..10u64 {
-    loop {
-        socket.send("Hello".into()).await?;
-        let repl = socket.recv().await?;
-        dbg!(repl);
+    match &cli.command {
+        Some(Commands::Show {}) => {
+            let jupyter_runtime_dir = Command::new("jupyter")
+                .args(["--runtime-dir"])
+                .output()
+                .expect("Jupyter not found");
+            println!(
+                "runtime: {:?}",
+                String::from_utf8(jupyter_runtime_dir.stdout)?
+                    .strip_suffix("\n")
+                    .unwrap()
+            );
+            // TODO: list connections at identified path
+            // TODO: explore using `jupyter_client::find_connection_file`, patching broken linux
+            // runtime spec
+        }
+        None => {}
     }
 
-    // Ok(())
+    Ok(())
 }
