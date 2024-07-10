@@ -647,7 +647,9 @@ dependencies = [
  "dirs",
  "glob",
  "log",
+ "serde",
  "serde_json",
+ "tokio",
  "tracing",
  "zeromq",
 ]
