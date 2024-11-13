@@ -1,15 +1,18 @@
 use serde::{Deserialize, Serialize};
+use std::borrow::BorrowMut;
 use std::fs;
+use std::future::Future;
+use std::thread;
 use std::time::Duration;
 use std::{error::Error, path::PathBuf};
 use tokio::time::timeout;
 // use tokio::{main, test};
-use zeromq::{ReqSocket, Socket, SocketRecv, SocketSend};
+use zeromq::{ReqSocket, Socket, SocketRecv, SocketSend, SubSocket};
 
 use clap::Parser;
 
-pub mod paths;
-pub mod select;
+// pub mod paths;
+// pub mod select;
 
 #[derive(Parser)]
 #[command(version, about, long_about=None)]
@@ -25,6 +28,7 @@ enum JupyterSocket {
     IOPub,
 }
 
+///The connection file of a jupyter kernel
 #[derive(Serialize, Deserialize, Debug)]
 struct ConnectionFile {
     control_port: u32,
@@ -66,6 +70,17 @@ async fn run_heartbeat(mut socket: ReqSocket) -> Result<(), Box<dyn Error>> {
             Ok(msg) => msg,
             Err(e) => break Err(Box::new(e)),
         };
+        thread::sleep(Duration::from_secs(2));
+        dbg!(msg);
+    }
+}
+
+async fn run_iopub(mut socket: SubSocket) -> Result<(), Box<dyn Error>> {
+    loop {
+        let msg = match socket.recv().await {
+            Ok(msg) => msg,
+            Err(e) => break Err(Box::new(e)),
+        };
         dbg!(msg);
     }
 }
@@ -74,36 +89,40 @@ async fn run_heartbeat(mut socket: ReqSocket) -> Result<(), Box<dyn Error>> {
 async fn main() -> Result<(), Box<dyn Error>> {
     let cli = Cli::parse();
     let connection_cfg = load_connection_file(cli.connection_file)?;
-    // println!("{:?}", connection_cfg.address(JupyterSocket::HeartBeat));
+    dbg!(&connection_cfg);
     let mut socket = ReqSocket::new();
     socket
         .connect(&connection_cfg.address(JupyterSocket::HeartBeat))
         .await
         .expect("Heart beat should be available");
-    if let Err(e) = run_heartbeat(socket).await {
-        println!("{:}", e)
-    };
-    // for _ in 0..10u64 {
-    //     socket.send("Hello".into()).await?;
-    //     let repl = socket.recv().await?;
-    //     dbg!(repl);
-    // }
-    Ok(())
-}
 
-// #[tokio::main]
-// async fn main() -> Result<(), Box<dyn Error>> {
-//     let mut socket = zeromq::ReqSocket::new();
-//     socket
-//         .connect("tcp://127.0.0.1:5555")
-//         .await
-//         .expect("Failed to connect");
-//     println!("Connected to server");
-//
-//     for _ in 0..10u64 {
-//         socket.send("Hello".into()).await?;
-//         let repl = socket.recv().await?;
-//         dbg!(repl);
-//     }
-//     Ok(())
-// }
+    let mut io_socket = SubSocket::new();
+    io_socket
+        .connect(&connection_cfg.address(JupyterSocket::IOPub))
+        .await
+        .expect("IOPub should be available");
+    io_socket.subscribe("").await?;
+
+    // tokio::spawn(async move {
+    //     if let Err(e) = run_heartbeat(socket).await {
+    //         println!("{:}", e)
+    //     };
+    // });
+    // tokio::spawn(async move {
+    //     if let Err(e) = run_iopub(io_socket).await {
+    //         println!("{:}", e)
+    //     };
+    // });
+
+    let msg = io_socket.recv().await;
+    dbg!(msg);
+    Ok(())
+
+    // if let Err(e) = run_iopub(io_socket).await {
+    //     println!("{:}", e)
+    // };
+
+    // loop {}
+
+    // Ok(())
+}
