@@ -2,15 +2,18 @@ use serde::{Deserialize, Serialize};
 use std::borrow::BorrowMut;
 use std::fs;
 use std::future::Future;
+use std::io::Read;
 use std::thread;
 use std::time::Duration;
 use std::{error::Error, path::PathBuf};
 use tokio::time::timeout;
 // use tokio::{main, test};
-use zeromq::{ReqSocket, Socket, SocketRecv, SocketSend, SubSocket};
+use zeromq::{ReqSocket, Socket, SocketRecv, SocketSend, SubSocket, ZmqMessage};
 
 use clap::Parser;
 
+mod message;
+mod tmp;
 // pub mod paths;
 // pub mod select;
 
@@ -77,11 +80,10 @@ async fn run_heartbeat(mut socket: ReqSocket) -> Result<(), Box<dyn Error>> {
 
 async fn run_iopub(mut socket: SubSocket) -> Result<(), Box<dyn Error>> {
     loop {
-        let msg = match socket.recv().await {
-            Ok(msg) => msg,
-            Err(e) => break Err(Box::new(e)),
-        };
-        dbg!(msg);
+        if let Ok(msg) = socket.recv().await {
+            dbg!(&msg);
+            message::decode_message(msg);
+        }
     }
 }
 
@@ -108,21 +110,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //         println!("{:}", e)
     //     };
     // });
-    // tokio::spawn(async move {
-    //     if let Err(e) = run_iopub(io_socket).await {
-    //         println!("{:}", e)
-    //     };
-    // });
+    tokio::spawn(async move {
+        if let Err(e) = run_iopub(io_socket).await {
+            println!("{:}", e)
+        };
+    });
 
-    let msg = io_socket.recv().await;
-    dbg!(msg);
-    Ok(())
+    // let msg = io_socket.recv().await;
+    // dbg!(msg);
+    // Ok(())
 
     // if let Err(e) = run_iopub(io_socket).await {
     //     println!("{:}", e)
     // };
 
-    // loop {}
-
-    // Ok(())
+    loop {}
+    Ok(())
 }
