@@ -3,6 +3,7 @@ use bytes::Bytes;
 use hex::decode;
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use sha2::Sha256;
 use zeromq::ZmqMessage;
 
@@ -33,6 +34,22 @@ struct MessageHeader {
     // msg_type: String,
     msg_type: MessageType,
     version: String,
+}
+
+// Content
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+struct Stream {
+    name: String,
+    text: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+struct DisplayData {
+    source: String,
+    data: Value,
+    metadata: Value,
+    transient: Value,
 }
 
 fn valid_sigature(
@@ -69,8 +86,12 @@ pub fn decode_message(digester: Digester, message: ZmqMessage) {
             );
             if let (Ok(header), Ok(parent_header)) = fields {
                 dbg!(id);
-                dbg!(header);
+                dbg!(&header);
                 dbg!(parent_header);
+                let content = match &header.msg_type {
+                    MessageType::DisplayData => serde_json::from_slice::<DisplayData>(content),
+                    _ => todo!(),
+                };
             } else {
                 dbg!(fields);
             }
