@@ -8,14 +8,30 @@ use zeromq::ZmqMessage;
 
 pub type Digester = Hmac<Sha256>;
 
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum MessageType {
+    Status,
+    Stream,
+    DisplayData,
+    UpdateDisplayData,
+    ExecuteInput,
+    ExecuteResult,
+    ExecuteRequest,
+    Error,
+    ClearOutput,
+    DebugEvent,
+}
+
 ///The header of a jupyter kernel message
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 struct MessageHeader {
     msg_id: String,
     session: String,
     username: String,
     date: String,
-    msg_type: String,
+    // msg_type: String,
+    msg_type: MessageType,
     version: String,
 }
 
@@ -44,11 +60,43 @@ fn valid_sigature(
 pub fn decode_message(digester: Digester, message: ZmqMessage) {
     match message.into_vec().as_slice() {
         [id, delim, sig, header, parent_header, metadata, content, ..]
-            if valid_sigature(digester, sig, header, parent_header, metadata, content) =>
+            if delim.to_vec() == b"<IDS|MSG>"
+                && valid_sigature(digester, sig, header, parent_header, metadata, content) =>
         {
-            println!("valid signature");
-            ()
+            let fields = (
+                serde_json::from_slice::<MessageHeader>(header),
+                serde_json::from_slice::<MessageHeader>(parent_header),
+            );
+            if let (Ok(header), Ok(parent_header)) = fields {
+                dbg!(id);
+                dbg!(header);
+                dbg!(parent_header);
+            } else {
+                dbg!(fields);
+            }
         }
         [..] => (),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_message_header() {
+        let json_data = "{\"msg_id\": \"44020b88-b2ac6dedcb4b258bf630b565_6108_328\", \"msg_type\": \"status\", \"username\": \"ptonner\", \"session\": \"44020b88-b2ac6dedcb4b258bf630b565\", \"date\": \"2024-11-15T01:46:35.992926Z\", \"version\": \"5.3\"}";
+        let my_enum: MessageHeader =
+            serde_json::from_str(json_data).expect("Failed to deserialize");
+        assert_eq!(
+            my_enum,
+            MessageHeader {
+                msg_id: "44020b88-b2ac6dedcb4b258bf630b565_6108_328".into(),
+                session: "44020b88-b2ac6dedcb4b258bf630b565".into(),
+                username: "ptonner".into(),
+                date: "2024-11-15T01:46:35.992926Z".into(),
+                msg_type: MessageType::Status,
+                version: "5.3".into()
+            }
+        )
     }
 }

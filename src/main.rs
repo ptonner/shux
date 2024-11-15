@@ -1,15 +1,11 @@
-use hex;
+use hmac::Mac;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::str::FromStr;
 use std::thread;
 use std::time::Duration;
 use std::{error::Error, path::PathBuf};
 use tokio::time::timeout;
-// use tokio::{main, test};
-use hmac::{Hmac, Mac};
-use sha2::Sha256;
-use zeromq::{ReqSocket, Socket, SocketRecv, SocketSend, SubSocket, ZmqMessage};
+use zeromq::{ReqSocket, Socket, SocketRecv, SocketSend, SubSocket};
 
 type Digester = message::Digester;
 
@@ -132,6 +128,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //     println!("{:}", e)
     // };
 
-    loop {}
-    Ok(())
+    loop {
+        thread::sleep(Duration::from_secs(1));
+    }
 }
