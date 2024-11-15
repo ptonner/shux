@@ -31,26 +31,28 @@ struct MessageHeader {
     session: String,
     username: String,
     date: String,
-    // msg_type: String,
     msg_type: MessageType,
     version: String,
 }
 
-// Content
+// Content (todo)
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
-struct Stream {
-    name: String,
-    text: String,
-}
-
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
-struct DisplayData {
-    source: String,
-    data: Value,
-    metadata: Value,
-    transient: Value,
-}
+// #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+// enum Content {
+//     Stream {
+//         name: String,
+//         text: String,
+//     },
+//     DisplayData {
+//         source: String,
+//         data: Value,
+//         metadata: Value,
+//         transient: Value,
+//     },
+//     Unknown {
+//         data: Value,
+//     },
+// }
 
 fn valid_sigature(
     mut digester: Digester,
@@ -83,15 +85,13 @@ pub fn decode_message(digester: Digester, message: ZmqMessage) {
             let fields = (
                 serde_json::from_slice::<MessageHeader>(header),
                 serde_json::from_slice::<MessageHeader>(parent_header),
+                serde_json::from_slice::<Value>(content),
             );
-            if let (Ok(header), Ok(parent_header)) = fields {
+            if let (Ok(header), Ok(parent_header), Ok(content)) = fields {
                 dbg!(id);
                 dbg!(&header);
                 dbg!(parent_header);
-                let content = match &header.msg_type {
-                    MessageType::DisplayData => serde_json::from_slice::<DisplayData>(content),
-                    _ => todo!(),
-                };
+                dbg!(content);
             } else {
                 dbg!(fields);
             }
