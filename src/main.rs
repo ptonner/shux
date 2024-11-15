@@ -1,19 +1,21 @@
+use hex;
 use serde::{Deserialize, Serialize};
-use std::borrow::BorrowMut;
 use std::fs;
-use std::future::Future;
-use std::io::Read;
+use std::str::FromStr;
 use std::thread;
 use std::time::Duration;
 use std::{error::Error, path::PathBuf};
 use tokio::time::timeout;
 // use tokio::{main, test};
+use hmac::{Hmac, Mac};
+use sha2::Sha256;
 use zeromq::{ReqSocket, Socket, SocketRecv, SocketSend, SubSocket, ZmqMessage};
+
+type Digester = message::Digester;
 
 use clap::Parser;
 
 mod message;
-mod tmp;
 // pub mod paths;
 // pub mod select;
 
@@ -78,11 +80,12 @@ async fn run_heartbeat(mut socket: ReqSocket) -> Result<(), Box<dyn Error>> {
     }
 }
 
-async fn run_iopub(mut socket: SubSocket) -> Result<(), Box<dyn Error>> {
+async fn run_iopub(digester: Digester, mut socket: SubSocket) -> Result<(), Box<dyn Error>> {
     loop {
         if let Ok(msg) = socket.recv().await {
+            println!("iopub");
             dbg!(&msg);
-            message::decode_message(msg);
+            message::decode_message(digester.clone(), msg);
         }
     }
 }
@@ -92,6 +95,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let cli = Cli::parse();
     let connection_cfg = load_connection_file(cli.connection_file)?;
     dbg!(&connection_cfg);
+
+    let dig = Digester::new_from_slice(connection_cfg.key.as_bytes())
+        .expect("HMAC can take key of any size");
+
     let mut socket = ReqSocket::new();
     socket
         .connect(&connection_cfg.address(JupyterSocket::HeartBeat))
@@ -111,7 +118,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //     };
     // });
     tokio::spawn(async move {
-        if let Err(e) = run_iopub(io_socket).await {
+        // if let Err(e) = run_iopub(dig.clone(), io_socket).await {
+        if let Err(e) = run_iopub(dig.clone(), io_socket).await {
             println!("{:}", e)
         };
     });

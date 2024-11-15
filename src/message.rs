@@ -1,11 +1,14 @@
+///The Jupyter Message Protocol
+use bytes::Bytes;
+use hex::decode;
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use zeromq::ZmqMessage;
 
-type Digester = Hmac<Sha256>;
+pub type Digester = Hmac<Sha256>;
 
-///The connection file of a jupyter kernel
+///The header of a jupyter kernel message
 #[derive(Serialize, Deserialize, Debug)]
 struct MessageHeader {
     msg_id: String,
@@ -16,38 +19,36 @@ struct MessageHeader {
     version: String,
 }
 
-fn decode_blocks(message: ZmqMessage) -> Vec<String> {
-    message
-        .into_vec()
-        .iter()
-        .map(|b| String::from_utf8(b.to_vec()).unwrap_or_default())
-        .collect()
+fn valid_sigature(
+    mut digester: Digester,
+    sig: &Bytes,
+    header: &Bytes,
+    parent_header: &Bytes,
+    metadata: &Bytes,
+    content: &Bytes,
+) -> bool {
+    digester.update(header);
+    digester.update(parent_header);
+    digester.update(metadata);
+    digester.update(content);
+    if let Ok(hsig) = decode(sig) {
+        match digester.verify_slice(hsig.as_slice()) {
+            Ok(()) => true,
+            Err(_) => false,
+        }
+    } else {
+        false
+    }
 }
 
-pub fn decode_message(message: ZmqMessage) {
-    match decode_blocks(message).as_slice() {
-        [id, delim, sig, header, parent_header, metadata, content, ..] if delim == "<IDS|MSG>" => {
-            let mut mac = Digester::new_from_slice(b"my secret and secure key")
-                .expect("HMAC can take key of any size");
-            mac.update(b"input message");
-            dbg!(id);
+pub fn decode_message(digester: Digester, message: ZmqMessage) {
+    match message.into_vec().as_slice() {
+        [id, delim, sig, header, parent_header, metadata, content, ..]
+            if valid_sigature(digester, sig, header, parent_header, metadata, content) =>
+        {
+            println!("valid signature");
+            ()
         }
-        _ => (),
+        [..] => (),
     }
-    // if let [id, delim, sig, header, parent_header, metadata, content, ..] =
-    //     decode_blocks(message).as_slice()
-    //     // message.into_vec().as_slice()
-    // {
-    //     if let Ok(delim) = String::from_utf8(delim.to_vec()).
-    //     {}
-    //     dbg!(id);
-    // }
-    // if let Some(header) = message.get(4) {
-    //     dbg!(header);
-    // }
-    // if let [id, delim, sig, header, parent_header, metadata, content, ..] = message.into_vec()[..] {
-    //     let header: MessageHeader =
-    //         serde_json::from_str(String::from_utf8(header.to_vec()).unwrap().as_str()).unwrap();
-    //     dbg!(header);
-    // }
 }
