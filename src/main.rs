@@ -1,13 +1,14 @@
+use std::collections::HashMap;
 use std::convert::Infallible;
 use std::fs::File;
 use std::io;
 use std::path::PathBuf;
 use std::process::Command;
-use std::thread;
 use std::time::Duration;
 use std::{error::Error, str::FromStr};
 
 use clap::{Parser, Subcommand};
+use jupyter_client::commands::Command as jcCommand;
 use jupyter_client::Client;
 use ratatui::{
     crossterm::event::{self, KeyCode, KeyEventKind},
@@ -31,6 +32,11 @@ enum Commands {
         kernel: PathBuf,
     },
     UI {},
+    /// Recieve input from stdin, send as command kernel
+    Send {
+        kernel: PathBuf,
+        command: String,
+    },
 }
 
 fn jupyter_runtime_dir() -> Result<PathBuf, Infallible> {
@@ -82,6 +88,27 @@ fn main() -> Result<(), Box<dyn Error>> {
             ratatui::restore();
             println!("{:?}", app_result);
         }
+        Some(Commands::Send { kernel, command }) => {
+            println!("sending to: {:?}", kernel);
+            match File::open(kernel) {
+                Ok(reader) => match Client::from_reader(reader) {
+                    Ok(client) => {
+                        if let Ok(resp) = client.send_shell_command(jcCommand::Execute {
+                            code: command.into(),
+                            silent: false,
+                            store_history: true,
+                            user_expressions: HashMap::new(),
+                            allow_stdin: true,
+                            stop_on_error: true,
+                        }) {
+                            dbg!("Response: {:?}", resp);
+                        };
+                    }
+                    Err(err) => println!("Client error: {:?}", err),
+                },
+                Err(err) => println!("File error: {:?}", err),
+            }
+        }
         Some(Commands::Watch { kernel }) => {
             println!("watching: {:?}", kernel);
             match File::open(kernel) {
@@ -90,15 +117,25 @@ fn main() -> Result<(), Box<dyn Error>> {
                         Ok(client) => {
                             // iopub
                             let receiver = client.iopub_subscribe()?;
-                            thread::spawn(move || {
-                                for msg in receiver {
-                                    println!("Received message from kernel: {:#?}", msg);
-                                }
-                            });
+                            // thread::spawn(move || {
+                            //     for msg in receiver {
+                            //         println!("Received message from kernel: {:#?}", msg);
+                            //     }
+                            // });
+
+                            let heartbeat = client.heartbeat_every(Duration::from_secs(2))?;
 
                             // wait
                             loop {
-                                thread::sleep(Duration::from_secs(2));
+                                // thread::sleep(Duration::from_secs(2));
+                                if let Ok(msg) = receiver.recv_timeout(Duration::from_secs(2)) {
+                                    println!("{:#?}", msg);
+                                }
+
+                                if heartbeat.try_recv().is_err() {
+                                    println!("No heartbeat");
+                                    break;
+                                }
                             }
                         }
                         Err(err) => println!("Client error: {:?}", err),
