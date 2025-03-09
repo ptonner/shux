@@ -36,9 +36,7 @@ struct Cli {
 enum Commands {
     /// Show available kernel connections
     List {},
-    Watch {
-        kernel: PathBuf,
-    },
+    Watch {},
     UI {},
     /// Recieve input from stdin, send as command kernel
     Send {
@@ -82,9 +80,14 @@ fn run(mut terminal: DefaultTerminal) -> io::Result<()> {
 fn main() -> Result<(), Box<dyn Error>> {
     let cli = Cli::parse();
 
-    if let Some(conf) = cli.config {
-        conf::set_env(&conf);
+    // setup config
+    if let Some(ref conf) = cli.config {
+        conf::set_config_env(&conf);
     }
+    if let Some(ref kernel) = cli.config {
+        conf::set_kernel_env(&kernel);
+    }
+    let mut conf = conf::Config::load();
 
     match &cli.command {
         Some(Commands::List {}) => {
@@ -104,13 +107,13 @@ fn main() -> Result<(), Box<dyn Error>> {
             println!("{:?}", app_result);
         }
         Some(Commands::Send { command }) => {
-            send::run(command.into(), cli.kernel.clone());
+            send::run(&conf, command.into());
         }
         Some(Commands::Select { kernel }) => {
-            select::select_kernel(kernel);
+            select::select_kernel(&mut conf, kernel);
         }
-        Some(Commands::Watch { kernel }) => {
-            watch::run(kernel)?;
+        Some(Commands::Watch {}) => {
+            watch::run(&conf)?;
         }
         None => {}
     }

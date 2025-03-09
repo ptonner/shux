@@ -8,14 +8,30 @@ const SHUX_KERNEL_ENV: &str = "SHUX_KERNEL";
 const SHUX_CONFIG: &str = ".shux.toml";
 
 /// Configuration for running shux
-#[derive(Serialize, Deserialize, Debug, Default)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Config {
     pub kernel: Option<PathBuf>,
+    #[serde(default)]
+    pub debug: bool,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Config {
+            kernel: None,
+            debug: false,
+        }
+    }
 }
 
 /// Set the location of the shux config file
-pub fn set_env(path: &PathBuf) {
+pub fn set_config_env(path: &PathBuf) {
     env::set_var(SHUX_CONFIG_ENV, path);
+}
+
+/// Set the location of the shux kernel file
+pub fn set_kernel_env(path: &PathBuf) {
+    env::set_var(SHUX_KERNEL_ENV, path);
 }
 
 fn find_project_root() -> PathBuf {
@@ -62,7 +78,7 @@ impl Config {
             let toml_string = fs::read_to_string(config_path).expect("Failed to read config file");
             toml::from_str(&toml_string).expect("Failed to parse config file")
         } else {
-            Config { kernel: None }
+            Config::default()
         };
 
         // If the kernel is not set in the config file, check the environment variable

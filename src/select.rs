@@ -2,8 +2,7 @@ use std::path::PathBuf;
 
 use crate::conf::Config;
 
-pub fn select_kernel(kernel: &Option<PathBuf>) {
-    let mut config = Config::load();
+pub fn select_kernel(config: &mut Config, kernel: &Option<PathBuf>) {
     match kernel {
         Some(path) => {
             config.kernel = Some(path.clone());
